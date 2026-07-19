@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Studio Manager">
+  <rect width="512" height="512" rx="112" fill="#7c1f17"/>
+  <path fill-rule="evenodd" fill="#efe8db" d="
+    M140 412 L140 200 A116 116 0 0 1 372 200 L372 412 Z
+    M180 412 L180 202 A76 76 0 0 1 332 202 L332 412 Z
+  "/>
+  <rect x="150" y="400" width="212" height="18" rx="6" fill="#efe8db"/>
+</svg>
