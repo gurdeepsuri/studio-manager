@@ -25,7 +25,7 @@ async function paintStorage(host) {
       <button class="btn btn--soft btn--sm" id="mkPersist" style="margin-left:.5rem">Make permanent</button>`;
     host.querySelector('#mkPersist').addEventListener('click', async () => {
       const ok = await requestPersistent();
-      toast(ok ? 'Storage is now permanent' : 'Add the app to your home screen, then try again', ok ? 'ok' : 'warn');
+      toast(ok ? 'Storage is now permanent' : 'Bookmark or install the app, then try again', ok ? 'ok' : 'warn');
       paintStorage(host);
     });
   }
