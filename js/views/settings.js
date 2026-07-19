@@ -31,6 +31,28 @@ async function paintStorage(host) {
   }
 }
 
+// Read an image file and downscale it to a small data URL (keeps storage light).
+function readImageResized(file, max = 320) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 const CURRENCIES = [
   { value: 'INR', label: '₹ Indian Rupee' },
   { value: 'USD', label: '$ US Dollar' },
@@ -52,7 +74,17 @@ export async function render(outlet) {
         field('Phone', input('phone', st.phone, { type: 'tel' })),
         field('Email', input('email', st.email, { type: 'email' })),
       )}
-      ${field('Address', textarea('address', st.address, { rows: 2, placeholder: 'Appears on printed quotes' }))}
+      ${field('Address', textarea('address', st.address, { rows: 2, placeholder: 'Appears on printed quotes & invoices' }))}
+      <div class="field">
+        <span class="field__label">Company logo</span>
+        <div class="logo-row">
+          <div class="logo-preview" id="logoPreview">${st.logo ? `<img src="${escapeHtml(st.logo)}" alt="logo">` : '<span class="muted small">No logo</span>'}</div>
+          <label class="btn btn--soft btn--sm" for="logoFile">Upload</label>
+          <input type="file" id="logoFile" accept="image/*" hidden>
+          <button type="button" class="btn btn--ghost btn--sm" id="logoRemove" ${st.logo ? '' : 'hidden'}>Remove</button>
+        </div>
+        <span class="field__hint">Shown on printed quotes & invoices. A small PNG/JPG works best.</span>
+      </div>
       ${formActions('Save profile')}
     </form>
 
@@ -60,16 +92,14 @@ export async function render(outlet) {
     <form id="defaults" class="form card-form">
       ${row(
         field('Currency', select('currency', st.currency, CURRENCIES)),
-        field('Default rate / hr', input('defaultRate', st.defaultRate, { type: 'number', min: 0, step: '50' })),
-      )}
-      ${row(
         field('GST %', input('taxRate', st.taxRate, { type: 'number', min: 0, step: '0.5' })),
-        field('Default reminder (min)', input('defaultReminder', st.defaultReminder, { type: 'number', min: 0, step: '10' })),
       )}
       ${row(
         field('Quote prefix', input('quotePrefix', st.quotePrefix, { placeholder: 'QT-' })),
         field('Invoice prefix', input('invoicePrefix', st.invoicePrefix, { placeholder: 'INV-' })),
       )}
+      ${field('Default reminder (min)', input('defaultReminder', st.defaultReminder, { type: 'number', min: 0, step: '10' }))}
+      ${field('Default notes / terms', textarea('invoiceTerms', st.invoiceTerms, { rows: 3, placeholder: 'Bank details, payment terms — prefilled on new quotes & invoices' }))}
       ${formActions('Save defaults')}
     </form>
 
@@ -100,13 +130,30 @@ export async function render(outlet) {
 
   paintStorage(outlet.querySelector('#storageStatus'));
 
+  // logo upload (kept out of readForm — handled as a data URL)
+  let logoData = st.logo || '';
+  const logoPreview = outlet.querySelector('#logoPreview');
+  const logoRemove = outlet.querySelector('#logoRemove');
+  const paintLogo = () => {
+    logoPreview.innerHTML = logoData ? `<img src="${logoData}" alt="logo">` : '<span class="muted small">No logo</span>';
+    if (logoRemove) logoRemove.hidden = !logoData;
+  };
+  outlet.querySelector('#logoFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try { logoData = await readImageResized(file); paintLogo(); toast('Logo added — save profile to keep it'); }
+    catch { toast('Could not read that image', 'warn'); }
+    e.target.value = '';
+  });
+  logoRemove?.addEventListener('click', () => { logoData = ''; paintLogo(); });
+
   outlet.querySelector('#exportIcs').addEventListener('click', async () => {
     (await import('./appointments.js')).exportAllICS();
   });
 
   outlet.querySelector('#profile').addEventListener('submit', async (e) => {
     e.preventDefault();
-    await updateSettings(readForm(e.target)); toast('Profile saved'); start();
+    await updateSettings({ ...readForm(e.target), logo: logoData }); toast('Profile saved'); start();
   });
   outlet.querySelector('#defaults').addEventListener('submit', async (e) => {
     e.preventDefault();

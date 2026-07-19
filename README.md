@@ -19,23 +19,26 @@ import here.
 ## Modules
 
 - **Dashboard** — today at a glance: upcoming meetings, active projects,
-  outstanding & overdue invoices, hours this week, spend this month, quick-add.
-- **Clients** — contact directory; each links to their projects, quotes,
-  invoices and meetings.
-- **Projects** — leads → completed, with budget and live rollups of money
-  received, expenses, profit and hours.
-- **Quotes** — line-item estimates with GST/discount, status, printable PDF,
-  share, and one-tap convert-to-invoice.
-- **Invoices** — raised directly or from a quote, with payment tracking, auto
-  status (Sent / Partially Paid / Paid / Overdue), printable letterhead, share.
+  outstanding & overdue invoices, received this month, spend this month, quick-add.
+- **Projects** — the core unit: each project holds its **client's details**, plus
+  live rollups of money received, expenses and profit. (Clients live on the
+  project — a project has one client.)
+- **Quotes** — line-item estimates with GST/discount, status, printable PDF (with
+  your logo), share, and one-tap convert-to-invoice. Addressed to a client
+  (via its project) or a vendor.
+- **Invoices** — addressed to a **client (via project) or a vendor**, with a
+  **direction** (they owe me / I owe them, i.e. vendor bills), payment tracking,
+  auto status (Sent / Partially Paid / Paid / Overdue), a **logo + description**
+  on the printed letterhead, and share.
 - **Schedule** — agenda + month calendar, reminders, and "Add to Calendar"
   (.ics) so the phone's own calendar notifies you.
-- **Vendors** — contractors & suppliers by trade, with search and tap-to-call /
-  WhatsApp.
-- **Expenses** / **Hours** — spend and time tracking, taggable to projects.
-- **Reports** — money in vs out, net profit, a 6-month trend, profit by project.
-- **Settings** — business profile, currency/rate/GST defaults, quote & invoice
-  numbering, backup/restore, and an optional passcode lock.
+- **Vendors** — contractors & suppliers by trade, with search, tap-to-call /
+  WhatsApp, and their invoices & bills.
+- **Expenses** — spend tracking, taggable to projects.
+- **Reports** — money in vs out, net profit, unpaid vendor bills (payables),
+  a 6-month trend, and profit by project.
+- **Settings** — business profile + **company logo**, currency/GST defaults,
+  default notes/terms, quote & invoice numbering, backup/restore, passcode lock.
 
 ## Run locally
 

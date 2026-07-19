@@ -409,3 +409,22 @@ select.control { appearance: none; background-image: url("data:image/svg+xml,%3C
 .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; margin-right: .2rem; }
 .dot--ok { background: var(--ok); }
 .dot--warn { background: var(--warn); }
+
+/* client-on-project card */
+.client-card { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); padding: .8rem .9rem; margin: 1rem 0; }
+.client-card__name { font-weight: 400; margin-bottom: .3rem; }
+.client-card .quick-row { margin: .3rem 0; }
+
+/* logo upload */
+.logo-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.logo-preview { width: 72px; height: 72px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  display: grid; place-content: center; overflow: hidden; background: var(--paper); }
+.logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* vendor bill tag (money you owe) */
+.tag--in { color: var(--warn); }
+
+/* print logo + description */
+.pq__brandwrap { display: flex; align-items: flex-start; gap: .8rem; }
+.pq__logo { max-height: 64px; max-width: 160px; object-fit: contain; }
+.pq__desc { margin: .6rem 0 0; font-size: .92rem; }

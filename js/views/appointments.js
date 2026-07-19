@@ -32,8 +32,10 @@ export async function render(outlet, param) {
 }
 
 async function renderList(outlet) {
-  const [appts, clients] = await Promise.all([db.list('appointments'), db.list('clients')]);
-  const cmap = indexById(clients);
+  const [appts, projects, vendors] = await Promise.all([
+    db.list('appointments'), db.list('projects'), db.list('vendors'),
+  ]);
+  const ctx = { pmap: indexById(projects), vmap: indexById(vendors) };
 
   outlet.innerHTML = `
     <div class="page-head">
@@ -53,11 +55,17 @@ async function renderList(outlet) {
 
   const body = outlet.querySelector('#schedBody');
   if (!appts.length) { body.innerHTML = emptyState('📅', 'Nothing scheduled', 'Add a meeting, site visit or call.'); return; }
-  if (_view === 'agenda') renderAgenda(body, appts, cmap);
-  else renderMonth(body, appts, cmap);
+  if (_view === 'agenda') renderAgenda(body, appts, ctx);
+  else renderMonth(body, appts, ctx);
 }
 
-function apptCard(a, cmap) {
+function apptSub(a, ctx) {
+  const p = ctx.pmap.get(a.projectId);
+  const v = ctx.vmap.get(a.vendorId);
+  return (p && (p.clientName || p.title)) || (v && v.name) || a.location || a.type || '';
+}
+
+function apptCard(a, ctx) {
   return `<button class="item" data-open="${a.id}">
     <span class="appt-when">
       <span class="appt-when__day">${relDay(a.datetime)}</span>
@@ -65,7 +73,7 @@ function apptCard(a, cmap) {
     </span>
     <span class="item__main">
       <span class="item__title">${TYPE_ICON[a.type] || '📌'} ${escapeHtml(a.title)}</span>
-      <span class="item__sub">${escapeHtml(cmap.get(a.clientId)?.name || a.location || a.type || '')}</span>
+      <span class="item__sub">${escapeHtml(apptSub(a, ctx))}</span>
     </span>
     ${a.status && a.status !== 'Scheduled' ? statusChip(a.status, STATUS_CLASS) : '<span class="item__chev">›</span>'}
   </button>`;
@@ -76,19 +84,19 @@ function wireOpen(host) {
     el.addEventListener('click', () => navigate('appointments/' + el.getAttribute('data-open'))));
 }
 
-function renderAgenda(body, appts, cmap) {
+function renderAgenda(body, appts, ctx) {
   const now = Date.now();
   const withTs = appts.map((a) => ({ ...a, ts: new Date(a.datetime).getTime() }));
   const upcoming = withTs.filter((a) => a.ts >= now - 3600000 && a.status !== 'Cancelled').sort((a, b) => a.ts - b.ts);
   const past = withTs.filter((a) => a.ts < now - 3600000 || a.status === 'Cancelled').sort((a, b) => b.ts - a.ts);
   body.innerHTML = `
-    ${upcoming.length ? `<h2 class="section-title">Upcoming</h2><div class="card-list">${upcoming.map((a) => apptCard(a, cmap)).join('')}</div>` : '<p class="muted small">No upcoming meetings.</p>'}
-    ${past.length ? `<h2 class="section-title">Past</h2><div class="card-list">${past.map((a) => apptCard(a, cmap)).join('')}</div>` : ''}
+    ${upcoming.length ? `<h2 class="section-title">Upcoming</h2><div class="card-list">${upcoming.map((a) => apptCard(a, ctx)).join('')}</div>` : '<p class="muted small">No upcoming meetings.</p>'}
+    ${past.length ? `<h2 class="section-title">Past</h2><div class="card-list">${past.map((a) => apptCard(a, ctx)).join('')}</div>` : ''}
   `;
   wireOpen(body);
 }
 
-function renderMonth(body, appts, cmap) {
+function renderMonth(body, appts, ctx) {
   const first = new Date(_cursor.getFullYear(), _cursor.getMonth(), 1);
   const offset = (first.getDay() + 6) % 7; // Monday-first
   const gridStart = addDays(first, -offset);
@@ -122,18 +130,18 @@ function renderMonth(body, appts, cmap) {
     <div class="cal-grid" id="calGrid">${cells.join('')}</div>
     <div id="dayList"></div>
   `;
-  body.querySelector('#prev').addEventListener('click', () => { _cursor = new Date(_cursor.getFullYear(), _cursor.getMonth() - 1, 1); _selectedDay = null; renderMonth(body, appts, cmap); });
-  body.querySelector('#next').addEventListener('click', () => { _cursor = new Date(_cursor.getFullYear(), _cursor.getMonth() + 1, 1); _selectedDay = null; renderMonth(body, appts, cmap); });
+  body.querySelector('#prev').addEventListener('click', () => { _cursor = new Date(_cursor.getFullYear(), _cursor.getMonth() - 1, 1); _selectedDay = null; renderMonth(body, appts, ctx); });
+  body.querySelector('#next').addEventListener('click', () => { _cursor = new Date(_cursor.getFullYear(), _cursor.getMonth() + 1, 1); _selectedDay = null; renderMonth(body, appts, ctx); });
   body.querySelectorAll('[data-day]').forEach((el) => el.addEventListener('click', () => {
     _selectedDay = new Date(el.getAttribute('data-day'));
-    renderMonth(body, appts, cmap);
+    renderMonth(body, appts, ctx);
   }));
 
   if (_selectedDay) {
     const list = appts.filter((a) => sameDay(a.datetime, _selectedDay)).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
     const host = body.querySelector('#dayList');
     host.innerHTML = `<h2 class="section-title">${fmtDate(_selectedDay)}</h2>
-      ${list.length ? `<div class="card-list">${list.map((a) => apptCard(a, cmap)).join('')}</div>`
+      ${list.length ? `<div class="card-list">${list.map((a) => apptCard(a, ctx)).join('')}</div>`
         : `<p class="muted small">Nothing scheduled. <button class="link-more" id="addDay">Add a meeting</button></p>`}`;
     wireOpen(host);
     host.querySelector('#addDay')?.addEventListener('click', () => {
@@ -146,9 +154,9 @@ function renderMonth(body, appts, cmap) {
 async function renderDetail(outlet, id) {
   const a = await db.get('appointments', id);
   if (!a) { outlet.innerHTML = emptyState('🔍', 'Not found'); return; }
-  const [clients, projects] = await Promise.all([db.list('clients'), db.list('projects')]);
-  const client = clients.find((c) => c.id === a.clientId);
+  const [projects, vendors] = await Promise.all([db.list('projects'), db.list('vendors')]);
   const project = projects.find((p) => p.id === a.projectId);
+  const vendor = vendors.find((v) => v.id === a.vendorId);
   const rem = REMINDERS.find((r) => r.value === Number(a.remindMins));
 
   outlet.innerHTML = `
@@ -170,8 +178,8 @@ async function renderDetail(outlet, id) {
       ${rem && rem.value ? `<span class="chip chip--info">🔔 ${rem.label}</span>` : ''}
     </div>
     <div class="contact-grid">
-      ${client ? `<button class="contact-cell" data-client="${client.id}"><span>👤</span>${escapeHtml(client.name)}</button>` : ''}
-      ${project ? `<button class="contact-cell" data-project="${project.id}"><span>📐</span>${escapeHtml(project.title)}</button>` : ''}
+      ${project ? `<button class="contact-cell" data-project="${project.id}"><span>📐</span>${escapeHtml(project.title)}${project.clientName ? ' · ' + escapeHtml(project.clientName) : ''}</button>` : ''}
+      ${vendor ? `<button class="contact-cell" data-vendor="${vendor.id}"><span>🧰</span>${escapeHtml(vendor.name)}</button>` : ''}
       ${a.location ? `<div class="contact-cell"><span>📍</span>${escapeHtml(a.location)}</div>` : ''}
     </div>
     ${a.notes ? `<div class="note-box">${escapeHtml(a.notes)}</div>` : ''}
@@ -187,8 +195,8 @@ async function renderDetail(outlet, id) {
   outlet.querySelector('#del').addEventListener('click', async () => {
     if (await confirmDialog('Delete this meeting?')) { await db.remove('appointments', id); toast('Deleted'); navigate('appointments'); }
   });
-  outlet.querySelector('[data-client]')?.addEventListener('click', (e) => navigate('clients/' + e.currentTarget.getAttribute('data-client')));
   outlet.querySelector('[data-project]')?.addEventListener('click', (e) => navigate('projects/' + e.currentTarget.getAttribute('data-project')));
+  outlet.querySelector('[data-vendor]')?.addEventListener('click', (e) => navigate('vendors/' + e.currentTarget.getAttribute('data-vendor')));
   outlet.querySelectorAll('[data-mark]').forEach((el) => el.addEventListener('click', async () => {
     await db.save('appointments', { ...a, status: el.getAttribute('data-mark') }); toast('Updated'); start();
   }));
@@ -198,7 +206,7 @@ export async function editAppt(preset = {}) {
   const a = preset.id ? preset
     : { datetime: defaultWhen(), status: 'Scheduled', type: 'Meeting', durationMins: 60, remindMins: settings().defaultReminder, ...preset };
   const isNew = !a.id;
-  const [clients, projects] = await Promise.all([db.list('clients'), db.list('projects')]);
+  const [projects, vendors] = await Promise.all([db.list('projects'), db.list('vendors')]);
   const s = openSheet({
     title: isNew ? 'New meeting' : 'Edit meeting',
     body: `<form id="f" class="form">
@@ -213,8 +221,8 @@ export async function editAppt(preset = {}) {
       )}
       ${field('Location', input('location', a.location, { placeholder: 'Address / meeting link' }))}
       ${row(
-        field('Client', select('clientId', a.clientId, clients.map((c) => ({ value: c.id, label: c.name })), { placeholder: 'No client' })),
-        field('Project', select('projectId', a.projectId, projects.map((p) => ({ value: p.id, label: p.title })), { placeholder: 'No project' })),
+        field('Project', select('projectId', a.projectId, projects.map((p) => ({ value: p.id, label: `${p.title}${p.clientName ? ' — ' + p.clientName : ''}` })), { placeholder: 'No project' })),
+        field('Vendor', select('vendorId', a.vendorId, vendors.map((v) => ({ value: v.id, label: v.name })), { placeholder: 'No vendor' })),
       )}
       ${field('Notes', textarea('notes', a.notes))}
       <label class="checkbox"><input type="checkbox" name="_ics" ${isNew ? 'checked' : ''}><span>Download calendar file to get a phone reminder</span></label>

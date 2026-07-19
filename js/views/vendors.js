@@ -97,6 +97,12 @@ async function renderDetail(outlet, id) {
   const v = await db.get('vendors', id);
   if (!v) { outlet.innerHTML = emptyState('🔍', 'Vendor not found'); return; }
   const wa = waNumber(v.phone);
+  const { invoiceTotals, displayStatus } = await import('./invoices.js');
+  const vInv = (await db.list('invoices')).filter((i) => i.vendorId === id)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const { money, fmtDate } = await import('../util.js');
+  const { currency } = await import('../state.js');
+  const cur = currency();
   outlet.innerHTML = `
     <div class="detail-head">
       <button class="link-back" id="back">‹ Vendors</button>
@@ -121,12 +127,28 @@ async function renderDetail(outlet, id) {
       ${v.address ? `<div class="contact-cell"><span>📍</span>${escapeHtml(v.address)}</div>` : ''}
     </div>
     ${v.notes ? `<div class="note-box">${escapeHtml(v.notes)}</div>` : ''}
+
+    <div class="quick-row">
+      <button class="btn btn--soft btn--sm" data-new-bill>+ Invoice / bill</button>
+    </div>
+    <h2 class="section-title">Invoices & bills (${vInv.length})</h2>
+    ${vInv.length ? `<div class="card-list">${vInv.map((i) => `
+      <button class="item" data-invoice="${i.id}">
+        <span class="item__main"><span class="item__title">${escapeHtml(i.number || 'Invoice')}${(i.direction || 'out') === 'in' ? ' <span class="tag tag--in">bill</span>' : ''}</span>
+        <span class="item__sub">${escapeHtml(displayStatus(i))} · ${fmtDate(i.date)}</span></span>
+        <span class="item__amt">${money(invoiceTotals(i).total, cur)}</span></button>`).join('')}</div>`
+      : `<p class="muted small">No invoices or bills yet.</p>`}
   `;
   outlet.querySelector('#back').addEventListener('click', () => navigate('vendors'));
   outlet.querySelector('#edit').addEventListener('click', () => editVendor(v));
   outlet.querySelector('#del').addEventListener('click', async () => {
     if (await confirmDialog(`Delete ${v.name}?`)) { await db.remove('vendors', id); toast('Deleted'); navigate('vendors'); }
   });
+  outlet.querySelector('[data-new-bill]').addEventListener('click', async () => {
+    (await import('./invoices.js')).editInvoice({ partyType: 'vendor', vendorId: id, direction: 'in' });
+  });
+  outlet.querySelectorAll('[data-invoice]').forEach((el) =>
+    el.addEventListener('click', () => navigate('invoices/' + el.getAttribute('data-invoice'))));
 }
 
 export function editVendor(v = {}) {

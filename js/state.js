@@ -10,15 +10,17 @@ const DEFAULT_SETTINGS = {
   email: '',
   phone: '',
   address: '',
+  logo: '',            // company logo as a data URL (shown on quotes/invoices)
   currency: 'INR',
-  defaultRate: 0,      // default hourly rate
   taxRate: 18,         // GST %
   quotePrefix: 'QT-',
   quoteSeq: 1,
   invoicePrefix: 'INV-',
   invoiceSeq: 1,
+  invoiceTerms: '',    // default notes/terms printed on quotes & invoices
   defaultReminder: 60, // default meeting reminder, minutes before
   passcode: '',        // optional privacy lock (not security-grade)
+  migratedV3: false,   // one-time clients→projects migration flag
 };
 
 let _settings = null;

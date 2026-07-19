@@ -14,15 +14,18 @@ const C_REV = '#2a78d6';  // revenue / received  (validated categorical slot 1)
 const C_EXP = '#eb6834';  // expenses            (validated categorical slot 6)
 
 export async function render(outlet) {
-  const [invoices, expenses, projects, time] = await Promise.all([
-    db.list('invoices'), db.list('expenses'), db.list('projects'), db.list('timeEntries'),
+  const [invoices, expenses, projects] = await Promise.all([
+    db.list('invoices'), db.list('expenses'), db.list('projects'),
   ]);
   const cur = currency();
 
   const live = invoices.filter((i) => i.status !== 'Cancelled');
-  const invoiced = sum(live, (i) => invoiceTotals(i).total);
-  const received = sum(live, (i) => invoiceTotals(i).paid);
-  const outstanding = sum(live, (i) => invoiceTotals(i).balance);
+  const outgoing = live.filter((i) => (i.direction || 'out') === 'out');
+  const incoming = live.filter((i) => (i.direction || 'out') === 'in');
+  const invoiced = sum(outgoing, (i) => invoiceTotals(i).total);
+  const received = sum(outgoing, (i) => invoiceTotals(i).paid);
+  const outstanding = sum(outgoing, (i) => invoiceTotals(i).balance);
+  const payables = sum(incoming, (i) => invoiceTotals(i).balance);
   const spent = sum(expenses, (e) => e.amount);
   const net = received - spent;
 
@@ -45,19 +48,20 @@ export async function render(outlet) {
       <span>Net (received − expenses)</span>
       <strong>${net >= 0 ? '' : '− '}${money(Math.abs(net), cur)}</strong>
     </div>
+    ${payables > 0 ? `<p class="muted small">You owe vendors (unpaid bills): <strong>${money(payables, cur)}</strong></p>` : ''}
 
     <h2 class="section-title">Last 6 months</h2>
     <div class="chart-legend">
       <span class="lg"><span class="lg__sw" style="background:${C_REV}"></span>Received</span>
       <span class="lg"><span class="lg__sw" style="background:${C_EXP}"></span>Expenses</span>
     </div>
-    <div class="chart-wrap">${monthlyChart(invoices, expenses, cur)}</div>
+    <div class="chart-wrap">${monthlyChart(outgoing, expenses, cur)}</div>
 
     <h2 class="section-title">Profit by project</h2>
     <div id="projRows"></div>
   `;
 
-  renderProjectRows(outlet.querySelector('#projRows'), projects, invoices, expenses, time, cur);
+  renderProjectRows(outlet.querySelector('#projRows'), projects, outgoing, expenses, cur);
 }
 
 // ---- 6-month grouped bars (received vs expenses), shared y-scale ----------
@@ -98,14 +102,13 @@ function monthlyChart(invoices, expenses, cur) {
 }
 
 // ---- per-project profit rows with comparable bars ------------------------
-function renderProjectRows(host, projects, invoices, expenses, time, cur) {
+function renderProjectRows(host, projects, invoices, expenses, cur) {
   const rows = projects.map((p) => {
-    const pInv = invoices.filter((i) => i.projectId === p.id && i.status !== 'Cancelled');
+    const pInv = invoices.filter((i) => i.projectId === p.id);
     const revenue = sum(pInv, (i) => invoiceTotals(i).paid);
     const cost = sum(expenses.filter((e) => e.projectId === p.id), (e) => e.amount);
-    const hours = sum(time.filter((t) => t.projectId === p.id), (t) => t.hours);
-    return { p, revenue, cost, profit: revenue - cost, hours };
-  }).filter((r) => r.revenue || r.cost || r.hours)
+    return { p, revenue, cost, profit: revenue - cost };
+  }).filter((r) => r.revenue || r.cost)
     .sort((a, b) => b.profit - a.profit);
 
   if (!rows.length) { host.innerHTML = `<p class="muted small">No project income or costs recorded yet.</p>`; return; }
@@ -122,7 +125,6 @@ function renderProjectRows(host, projects, invoices, expenses, time, cur) {
       </div>
       <div class="bar-line"><span class="bar" style="width:${pct(r.revenue)}%;background:${C_REV}"></span><span class="bar-val">${moneyShort(r.revenue, cur)}</span></div>
       <div class="bar-line"><span class="bar" style="width:${pct(r.cost)}%;background:${C_EXP}"></span><span class="bar-val">${moneyShort(r.cost, cur)}</span></div>
-      <div class="proj-row__foot muted small">${r.hours ? r.hours.toFixed(1) + 'h logged' : ''}</div>
     </button>`).join('');
   host.querySelectorAll('[data-open]').forEach((el) =>
     el.addEventListener('click', () => navigate('projects/' + el.getAttribute('data-open'))));

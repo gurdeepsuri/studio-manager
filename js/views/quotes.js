@@ -5,8 +5,9 @@
 import { db } from '../db.js';
 import { openSheet, closeSheet, toast, confirmDialog, emptyState, statusChip, readForm } from '../ui.js';
 import { field, input, textarea, select, row, formActions } from '../form.js';
-import { escapeHtml, money, fmtDate, byNewest, sum, indexById } from '../util.js';
+import { escapeHtml, money, fmtDate, byNewest, sum } from '../util.js';
 import { settings, currency, updateSettings } from '../state.js';
+import { recipientOf, recipientName, recipientFields, initRecipient, readRecipient } from '../party.js';
 import { shareText } from '../share.js';
 import { navigate, start } from '../router.js';
 
@@ -29,8 +30,7 @@ export async function render(outlet, param) {
 }
 
 async function renderList(outlet) {
-  const [quotes, clients] = await Promise.all([db.list('quotes'), db.list('clients')]);
-  const cmap = indexById(clients);
+  const [quotes, projects, vendors] = await Promise.all([db.list('quotes'), db.list('projects'), db.list('vendors')]);
   const list = quotes.sort(byNewest);
   const cur = currency();
   const outstanding = sum(list.filter((q) => ['Draft', 'Sent'].includes(q.status)), (q) => q.total);
@@ -44,7 +44,7 @@ async function renderList(outlet) {
       <button class="item" data-open="${q.id}">
         <span class="item__main">
           <span class="item__title">${escapeHtml(q.number || 'Quote')}</span>
-          <span class="item__sub">${escapeHtml(cmap.get(q.clientId)?.name || 'No client')} · ${fmtDate(q.date)}</span>
+          <span class="item__sub">${escapeHtml(recipientName(q, projects, vendors))} · ${fmtDate(q.date)}</span>
         </span>
         <span class="item__right">${statusChip(q.status, STATUS_CLASS)}<span class="item__amt">${money(q.total || 0, cur)}</span></span>
       </button>`).join('')}</div>`
@@ -58,9 +58,8 @@ async function renderList(outlet) {
 async function renderDetail(outlet, id) {
   const q = await db.get('quotes', id);
   if (!q) { outlet.innerHTML = emptyState('🔍', 'Quote not found'); return; }
-  const [clients, projects] = await Promise.all([db.list('clients'), db.list('projects')]);
-  const client = clients.find((c) => c.id === q.clientId);
-  const project = projects.find((p) => p.id === q.projectId);
+  const [projects, vendors] = await Promise.all([db.list('projects'), db.list('vendors')]);
+  const to = recipientOf(q, projects, vendors);
   const cur = currency();
   const t = quoteTotals(q);
 
@@ -79,10 +78,10 @@ async function renderDetail(outlet, id) {
       ${statusChip(q.status, STATUS_CLASS)}
     </div>
     <div class="meta-line muted small">
-      ${client ? escapeHtml(client.name) : 'No client'} ·
+      ${escapeHtml(to.name || 'No recipient')}${to.projectTitle ? ` · ${escapeHtml(to.projectTitle)}` : ''} ·
       ${fmtDate(q.date)}${q.validUntil ? ` · valid till ${fmtDate(q.validUntil)}` : ''}
-      ${project ? ` · ${escapeHtml(project.title)}` : ''}
     </div>
+    ${q.description ? `<div class="note-box">${escapeHtml(q.description)}</div>` : ''}
 
     <div class="status-picker" id="statusPicker">
       ${STATUSES.map((sname) => `<button class="pill ${sname === q.status ? 'pill--on' : ''}" data-status="${sname}">${sname}</button>`).join('')}
@@ -115,8 +114,8 @@ async function renderDetail(outlet, id) {
 
   outlet.querySelector('#back').addEventListener('click', () => navigate('quotes'));
   outlet.querySelector('#edit').addEventListener('click', () => editQuote(q));
-  outlet.querySelector('#print').addEventListener('click', () => printQuote(q, client, project));
-  outlet.querySelector('#share').addEventListener('click', () => shareQuote(q, client));
+  outlet.querySelector('#print').addEventListener('click', () => printQuote(q, to));
+  outlet.querySelector('#share').addEventListener('click', () => shareQuote(q, to));
   outlet.querySelector('#toInvoice').addEventListener('click', async () => {
     if (await confirmDialog('Create an invoice from this quote? You can edit it afterwards.', { danger: false, okLabel: 'Create invoice' })) {
       (await import('./invoices.js')).invoiceFromQuote(q);
@@ -141,23 +140,23 @@ export async function editQuote(preset = {}) {
     date: new Date().toISOString().slice(0, 10),
     status: 'Draft',
     taxRate: settings().taxRate,
+    notes: settings().invoiceTerms || '',
+    partyType: 'client',
     ...preset,
   };
   const isNew = !q.id;
-  const [clients, projects] = await Promise.all([db.list('clients'), db.list('projects')]);
+  const [projects, vendors] = await Promise.all([db.list('projects'), db.list('vendors')]);
 
   const s = openSheet({
     wide: true,
     title: isNew ? 'New quote' : 'Edit quote',
     body: `<form id="f" class="form">
-      ${row(
-        field('Client', select('clientId', q.clientId, clients.map((c) => ({ value: c.id, label: c.name })), { placeholder: 'No client' })),
-        field('Project', select('projectId', q.projectId, projects.map((p) => ({ value: p.id, label: p.title })), { placeholder: 'No project' })),
-      )}
+      ${recipientFields(q, projects, vendors)}
       ${row(
         field('Date', input('date', q.date, { type: 'date' })),
         field('Valid until', input('validUntil', q.validUntil, { type: 'date' })),
       )}
+      ${field('Description', textarea('description', q.description, { rows: 2, placeholder: 'Short summary shown under the title (optional)' }))}
       <div class="field__label">Line items</div>
       <div id="items"></div>
       <button type="button" class="btn btn--soft btn--sm" id="addItem">+ Add item</button>
@@ -172,6 +171,7 @@ export async function editQuote(preset = {}) {
   });
 
   const form = s.root.querySelector('#f');
+  initRecipient(form);
   const itemsHost = form.querySelector('#items');
 
   function itemRow(item = { desc: '', qty: 1, rate: 0 }) {
@@ -214,6 +214,7 @@ export async function editQuote(preset = {}) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const base = readForm(form);
+    const party = readRecipient(form, projects, vendors);
     const items = collectItems();
     let number = q.number;
     if (isNew) {
@@ -221,7 +222,7 @@ export async function editQuote(preset = {}) {
       number = `${st.quotePrefix || 'QT-'}${String(st.quoteSeq || 1).padStart(4, '0')}`;
       await updateSettings({ quoteSeq: (st.quoteSeq || 1) + 1 });
     }
-    const rec = { ...q, ...base, items, number };
+    const rec = { ...q, ...base, ...party, items, number };
     rec.total = quoteTotals(rec).total; // denormalized for fast lists
     await db.save('quotes', rec);
     closeSheet();
@@ -231,22 +232,23 @@ export async function editQuote(preset = {}) {
 }
 
 // ---- share ----------------------------------------------------------------
-function shareQuote(q, client) {
+function shareQuote(q, to) {
   const cur = currency();
   const t = quoteTotals(q);
   const st = settings();
   const text = [
-    `${st.businessName || 'Your Studio'} — Quote ${q.number}`,
-    client ? `For: ${client.name}` : '',
+    `${st.businessName || 'Studio'} — Quote ${q.number}`,
+    to.name ? `For: ${to.name}` : '',
     `Date: ${fmtDate(q.date)}${q.validUntil ? ` · Valid till: ${fmtDate(q.validUntil)}` : ''}`,
+    q.description ? q.description : '',
     `Estimate: ${money(t.total, cur)} (incl. GST)`,
     q.notes ? `\n${q.notes}` : '',
   ].filter(Boolean).join('\n');
-  shareText({ title: `Quote ${q.number}`, text, contact: client || {} });
+  shareText({ title: `Quote ${q.number}`, text, contact: to });
 }
 
 // ---- printable view -------------------------------------------------------
-function printQuote(q, client, project) {
+function printQuote(q, to) {
   const cur = currency();
   const st = settings();
   const t = quoteTotals(q);
@@ -256,10 +258,13 @@ function printQuote(q, client, project) {
   area.innerHTML = `
     <div class="pq">
       <div class="pq__head">
-        <div>
-          <div class="pq__brand">${escapeHtml(st.businessName || 'Your Studio')}</div>
-          <div class="pq__muted">${escapeHtml(st.address || '')}</div>
-          <div class="pq__muted">${escapeHtml([st.phone, st.email].filter(Boolean).join(' · '))}</div>
+        <div class="pq__brandwrap">
+          ${st.logo ? `<img class="pq__logo" src="${escapeHtml(st.logo)}" alt="">` : ''}
+          <div>
+            <div class="pq__brand">${escapeHtml(st.businessName || 'Studio')}</div>
+            <div class="pq__muted">${escapeHtml(st.address || '')}</div>
+            <div class="pq__muted">${escapeHtml([st.phone, st.email].filter(Boolean).join(' · '))}</div>
+          </div>
         </div>
         <div class="pq__title">QUOTATION</div>
       </div>
@@ -267,12 +272,13 @@ function printQuote(q, client, project) {
         <div><strong>${escapeHtml(q.number || '')}</strong><br>Date: ${fmtDate(q.date)}${q.validUntil ? `<br>Valid until: ${fmtDate(q.validUntil)}` : ''}</div>
         <div class="pq__to">
           <div class="pq__muted">Prepared for</div>
-          <strong>${escapeHtml(client?.name || '')}</strong>
-          ${client?.company ? `<br>${escapeHtml(client.company)}` : ''}
-          ${client?.address ? `<br>${escapeHtml(client.address)}` : ''}
-          ${project ? `<br><span class="pq__muted">Project: ${escapeHtml(project.title)}</span>` : ''}
+          <strong>${escapeHtml(to.name || '')}</strong>
+          ${to.company ? `<br>${escapeHtml(to.company)}` : ''}
+          ${to.address ? `<br>${escapeHtml(to.address)}` : ''}
+          ${to.projectTitle ? `<br><span class="pq__muted">Project: ${escapeHtml(to.projectTitle)}</span>` : ''}
         </div>
       </div>
+      ${q.description ? `<p class="pq__desc">${escapeHtml(q.description)}</p>` : ''}
       <table class="pq__table">
         <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
         <tbody>${(q.items || []).map((i) => `<tr>

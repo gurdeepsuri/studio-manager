@@ -3,18 +3,17 @@
 // ============================================================================
 
 import { route, initRouter, start, navigate } from './router.js';
-import { loadSettings, settings } from './state.js';
+import { loadSettings, settings, updateSettings } from './state.js';
+import { db } from './db.js';
 import { escapeHtml } from './util.js';
 import { requestPersistent } from './storage.js';
 
 import { render as dashboard } from './views/dashboard.js';
-import { render as clients } from './views/clients.js';
 import { render as projects } from './views/projects.js';
 import { render as quotes } from './views/quotes.js';
 import { render as invoices } from './views/invoices.js';
 import { render as appointments } from './views/appointments.js';
 import { render as expenses } from './views/expenses.js';
-import { render as time } from './views/time.js';
 import { render as vendors } from './views/vendors.js';
 import { render as reports } from './views/reports.js';
 import { render as settingsView } from './views/settings.js';
@@ -27,10 +26,8 @@ const NAV = [
 ];
 const MORE = [
   { id: 'quotes', label: 'Quotes', icon: '🧾' },
-  { id: 'clients', label: 'Clients', icon: '👥' },
   { id: 'vendors', label: 'Vendors', icon: '🧰' },
   { id: 'expenses', label: 'Expenses', icon: '💸' },
-  { id: 'time', label: 'Hours', icon: '⏱️' },
   { id: 'reports', label: 'Reports', icon: '📊' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ];
@@ -114,19 +111,25 @@ function showLock() {
   });
 }
 
+// ---- one-time data migrations --------------------------------------------
+async function runMigrations() {
+  if (settings().migratedV3) return;
+  try { await db.migrateV3(); } catch { /* best-effort */ }
+  await updateSettings({ migratedV3: true });
+}
+
 // ---- boot -----------------------------------------------------------------
 async function boot() {
   await loadSettings();
+  await runMigrations();
 
   route('dashboard', dashboard);
   route('projects', projects);
   route('quotes', quotes);
   route('invoices', invoices);
   route('appointments', appointments);
-  route('clients', clients);
   route('vendors', vendors);
   route('expenses', expenses);
-  route('time', time);
   route('reports', reports);
   route('settings', settingsView);
 

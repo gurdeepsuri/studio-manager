@@ -10,12 +10,11 @@
 import { uid } from './util.js';
 
 const DB_NAME = 'studio-manager';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 // The "resources". Add one here + a nav entry and you have a new module.
 export const STORES = [
-  'clients', 'projects', 'quotes', 'invoices', 'appointments',
-  'expenses', 'timeEntries', 'vendors',
+  'projects', 'quotes', 'invoices', 'appointments', 'expenses', 'vendors',
 ];
 // settings is a single-document store (key/value)
 const KV_STORE = 'settings';
@@ -114,5 +113,31 @@ export const db = {
   },
   async wipe() {
     for (const s of STORES) await this.clear(s);
+  },
+
+  // Safely read a store that may not exist (legacy data from older versions).
+  async legacyList(store) {
+    try { return await this.list(store); } catch { return []; }
+  },
+
+  // v3 migration: clients merged into projects. Copy each project's client
+  // record (from the old `clients` store) onto the project itself. Idempotent.
+  async migrateV3() {
+    const projects = await this.list('projects');
+    const clients = await this.legacyList('clients');
+    if (!clients.length) return;
+    const cmap = new Map(clients.map((c) => [c.id, c]));
+    for (const p of projects) {
+      if (p.clientId && !p.clientName) {
+        const c = cmap.get(p.clientId);
+        if (c) {
+          await this.save('projects', {
+            ...p,
+            clientName: c.name, clientCompany: c.company, clientPhone: c.phone,
+            clientEmail: c.email, clientAddress: c.address,
+          });
+        }
+      }
+    }
   },
 };
