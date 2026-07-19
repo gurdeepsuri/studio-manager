@@ -3,7 +3,28 @@
 // Views build their HTML with template strings and rely on these for chrome.
 // ============================================================================
 
-import { escapeHtml } from './util.js';
+import { escapeHtml, debounce } from './util.js';
+
+// ---- filter bar (search + status chips) -----------------------------------
+// Renders a search box and a row of filter pills. Wire it with wireFilterBar,
+// which repaints only the list host so the search box keeps focus.
+export function filterBar({ q = '', placeholder = 'Search…', chips = [], active = '' }) {
+  return `
+    <input class="control search" data-fb-search type="search" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(q)}" aria-label="Search">
+    <div class="chip-row" data-fb-chips>
+      ${chips.map((c) => `<button class="pill ${String(c.value) === String(active) ? 'pill--on' : ''}" data-fb="${escapeHtml(c.value)}">${escapeHtml(c.label)}</button>`).join('')}
+    </div>`;
+}
+// state: a mutable object with { q, status }. onChange() runs after each change.
+export function wireFilterBar(root, state, onChange) {
+  const search = root.querySelector('[data-fb-search]');
+  if (search) search.addEventListener('input', debounce((e) => { state.q = e.target.value; onChange(); }, 150));
+  root.querySelectorAll('[data-fb]').forEach((btn) => btn.addEventListener('click', () => {
+    state.status = btn.getAttribute('data-fb');
+    root.querySelectorAll('[data-fb-chips] .pill').forEach((p) => p.classList.toggle('pill--on', p === btn));
+    onChange();
+  }));
+}
 
 // ---- toast ----------------------------------------------------------------
 let toastTimer;

@@ -1,7 +1,7 @@
 // ============================================================================
 // sw.js — offline app shell. Bump CACHE when files change to force an update.
 // ============================================================================
-const CACHE = 'studio-manager-v3';
+const CACHE = 'studio-manager-v4';
 
 const ASSETS = [
   './',

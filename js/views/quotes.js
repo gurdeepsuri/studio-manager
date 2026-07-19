@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { db } from '../db.js';
-import { openSheet, closeSheet, toast, confirmDialog, emptyState, statusChip, readForm } from '../ui.js';
+import { openSheet, closeSheet, toast, confirmDialog, emptyState, statusChip, readForm, filterBar, wireFilterBar } from '../ui.js';
 import { field, input, textarea, select, row, formActions } from '../form.js';
 import { escapeHtml, money, fmtDate, byNewest, sum } from '../util.js';
 import { settings, currency, updateSettings } from '../state.js';
@@ -13,6 +13,7 @@ import { navigate, start } from '../router.js';
 
 export const STATUSES = ['Draft', 'Sent', 'Accepted', 'Rejected', 'Expired'];
 const STATUS_CLASS = { Draft: 'neutral', Sent: 'info', Accepted: 'done', Rejected: 'warn', Expired: 'neutral' };
+const _qf = { q: '', status: '' };
 
 // ---- money math -----------------------------------------------------------
 export function quoteTotals(q) {
@@ -35,24 +36,39 @@ async function renderList(outlet) {
   const cur = currency();
   const outstanding = sum(list.filter((q) => ['Draft', 'Sent'].includes(q.status)), (q) => q.total);
 
+  const card = (q) => `<button class="item" data-open="${q.id}">
+    <span class="item__main">
+      <span class="item__title">${escapeHtml(q.number || 'Quote')}</span>
+      <span class="item__sub">${escapeHtml(recipientName(q, projects, vendors))} · ${fmtDate(q.date)}</span>
+    </span>
+    <span class="item__right">${statusChip(q.status, STATUS_CLASS)}<span class="item__amt">${money(q.total || 0, cur)}</span></span>
+  </button>`;
+  const chips = [{ value: '', label: 'All' }, ...STATUSES.map((s) => ({ value: s, label: s }))];
+
   outlet.innerHTML = `
     <div class="page-head">
       <div><h1>Quotes</h1><p class="muted">${list.length} total · ${money(outstanding, cur)} open</p></div>
       <button class="btn btn--primary" id="add">+ Quote</button>
     </div>
-    ${list.length ? `<div class="card-list">${list.map((q) => `
-      <button class="item" data-open="${q.id}">
-        <span class="item__main">
-          <span class="item__title">${escapeHtml(q.number || 'Quote')}</span>
-          <span class="item__sub">${escapeHtml(recipientName(q, projects, vendors))} · ${fmtDate(q.date)}</span>
-        </span>
-        <span class="item__right">${statusChip(q.status, STATUS_CLASS)}<span class="item__amt">${money(q.total || 0, cur)}</span></span>
-      </button>`).join('')}</div>`
+    ${list.length ? `${filterBar({ q: _qf.q, placeholder: 'Search number or recipient…', chips, active: _qf.status })}
+       <div class="card-list" id="list"></div>`
       : emptyState('🧾', 'No quotes yet', 'Create an estimate you can print or share as PDF.')}
   `;
   outlet.querySelector('#add').addEventListener('click', () => editQuote());
-  outlet.querySelectorAll('[data-open]').forEach((el) =>
-    el.addEventListener('click', () => navigate('quotes/' + el.getAttribute('data-open'))));
+  if (!list.length) return;
+
+  const listHost = outlet.querySelector('#list');
+  const paint = () => {
+    const q = _qf.q.trim().toLowerCase();
+    const rows = list.filter((doc) =>
+      (!_qf.status || doc.status === _qf.status) &&
+      (!q || [doc.number, recipientName(doc, projects, vendors)].filter(Boolean).some((s) => s.toLowerCase().includes(q))));
+    listHost.innerHTML = rows.length ? rows.map(card).join('') : `<p class="muted small">No quotes match.</p>`;
+    listHost.querySelectorAll('[data-open]').forEach((el) =>
+      el.addEventListener('click', () => navigate('quotes/' + el.getAttribute('data-open'))));
+  };
+  paint();
+  wireFilterBar(outlet, _qf, paint);
 }
 
 async function renderDetail(outlet, id) {

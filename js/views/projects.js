@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { db } from '../db.js';
-import { openSheet, closeSheet, toast, confirmDialog, emptyState, statusChip, readForm } from '../ui.js';
+import { openSheet, closeSheet, toast, confirmDialog, emptyState, statusChip, readForm, filterBar, wireFilterBar } from '../ui.js';
 import { field, input, textarea, select, row, formActions } from '../form.js';
 import { escapeHtml, money, moneyShort, fmtDate, byNewest, sum, waNumber } from '../util.js';
 import { currency } from '../state.js';
@@ -12,6 +12,7 @@ import { invoiceTotals as invTotals, displayStatus as invStatus } from './invoic
 import { navigate, start } from '../router.js';
 
 export const STATUSES = ['Lead', 'Active', 'On Hold', 'Completed', 'Cancelled'];
+const _pf = { q: '', status: '' };
 export const TYPES = ['Interior', 'Architecture', 'Turnkey', 'Renovation', 'Consultation'];
 const STATUS_CLASS = {
   Lead: 'info', Active: 'go', 'On Hold': 'warn', Completed: 'done', Cancelled: 'neutral',
@@ -25,7 +26,6 @@ export async function render(outlet, param) {
 async function renderList(outlet) {
   const projects = (await db.list('projects')).sort(byNewest);
   const active = projects.filter((p) => !['Completed', 'Cancelled'].includes(p.status));
-  const closed = projects.filter((p) => ['Completed', 'Cancelled'].includes(p.status));
   const cur = currency();
 
   const card = (p) => `<button class="item" data-open="${p.id}">
@@ -39,18 +39,32 @@ async function renderList(outlet) {
     </span>
   </button>`;
 
+  const chips = [{ value: '', label: 'All' }, ...STATUSES.map((s) => ({ value: s, label: s }))];
+
   outlet.innerHTML = `
     <div class="page-head">
       <div><h1>Projects</h1><p class="muted">${active.length} active · ${projects.length} total</p></div>
       <button class="btn btn--primary" id="add">+ Project</button>
     </div>
-    ${!projects.length ? emptyState('📐', 'No projects yet', 'A project holds the client, quotes, invoices and expenses for one job.') : ''}
-    ${active.length ? `<div class="card-list">${active.map(card).join('')}</div>` : ''}
-    ${closed.length ? `<h2 class="section-title">Closed</h2><div class="card-list">${closed.map(card).join('')}</div>` : ''}
+    ${!projects.length ? emptyState('📐', 'No projects yet', 'A project holds the client, quotes, invoices and expenses for one job.')
+      : `${filterBar({ q: _pf.q, placeholder: 'Search projects or clients…', chips, active: _pf.status })}
+         <div class="card-list" id="list"></div>`}
   `;
   outlet.querySelector('#add').addEventListener('click', () => editProject());
-  outlet.querySelectorAll('[data-open]').forEach((el) =>
-    el.addEventListener('click', () => navigate('projects/' + el.getAttribute('data-open'))));
+  if (!projects.length) return;
+
+  const listHost = outlet.querySelector('#list');
+  const paint = () => {
+    const q = _pf.q.trim().toLowerCase();
+    const rows = projects.filter((p) =>
+      (!_pf.status || p.status === _pf.status) &&
+      (!q || [p.title, p.clientName, p.clientCompany].filter(Boolean).some((s) => s.toLowerCase().includes(q))));
+    listHost.innerHTML = rows.length ? rows.map(card).join('') : `<p class="muted small">No projects match.</p>`;
+    listHost.querySelectorAll('[data-open]').forEach((el) =>
+      el.addEventListener('click', () => navigate('projects/' + el.getAttribute('data-open'))));
+  };
+  paint();
+  wireFilterBar(outlet, _pf, paint);
 }
 
 async function renderDetail(outlet, id) {
@@ -150,7 +164,9 @@ async function renderDetail(outlet, id) {
   outlet.querySelector('#back').addEventListener('click', () => navigate('projects'));
   outlet.querySelector('#edit').addEventListener('click', () => editProject(p));
   outlet.querySelector('#del').addEventListener('click', async () => {
-    if (await confirmDialog(`Delete project "${p.title}"?`)) {
+    const linked = pInv.length + pQuotes.length + pExp.length;
+    const warn = linked ? ` Its ${linked} invoice/quote/expense record${linked > 1 ? 's' : ''} will remain but lose the project link.` : '';
+    if (await confirmDialog(`Delete project "${p.title}"?${warn}`)) {
       await db.remove('projects', id); toast('Project deleted'); navigate('projects');
     }
   });

@@ -5,9 +5,9 @@
 // ============================================================================
 
 import { db } from '../db.js';
-import { openSheet, closeSheet, toast, confirmDialog, emptyState, statusChip, readForm } from '../ui.js';
+import { openSheet, closeSheet, toast, confirmDialog, emptyState, statusChip, readForm, filterBar, wireFilterBar } from '../ui.js';
 import { field, input, textarea, select, row, formActions } from '../form.js';
-import { escapeHtml, money, fmtDate, todayISO, byNewest, sum, indexById, uid, addDays } from '../util.js';
+import { escapeHtml, money, fmtDate, todayISO, byNewest, sum, uid, addDays } from '../util.js';
 import { settings, currency, updateSettings } from '../state.js';
 import { quoteTotals } from './quotes.js';
 import { recipientOf, recipientName, recipientFields, initRecipient, readRecipient } from '../party.js';
@@ -19,6 +19,7 @@ const STATUS_CLASS = {
   Draft: 'neutral', Sent: 'info', 'Partially Paid': 'warn', Paid: 'done', Overdue: 'warn', Cancelled: 'neutral',
 };
 const isIncoming = (inv) => (inv.direction || 'out') === 'in';
+const _if = { q: '', status: '' };
 
 // totals + payment rollup + effective status
 export function invoiceTotals(inv) {
@@ -51,28 +52,54 @@ async function renderList(outlet) {
   const toCollect = sum(live.filter((i) => !isIncoming(i)), (i) => invoiceTotals(i).balance);
   const toPay = sum(live.filter((i) => isIncoming(i)), (i) => invoiceTotals(i).balance);
 
+  const card = (inv) => {
+    const t = invoiceTotals(inv); const st = displayStatus(inv);
+    return `<button class="item" data-open="${inv.id}">
+      <span class="item__main">
+        <span class="item__title">${escapeHtml(inv.number || 'Invoice')}${isIncoming(inv) ? ' <span class="tag tag--in">bill</span>' : ''}</span>
+        <span class="item__sub">${escapeHtml(recipientName(inv, projects, vendors))} · ${fmtDate(inv.date)}</span>
+      </span>
+      <span class="item__right">${statusChip(st, STATUS_CLASS)}
+        <span class="item__amt">${money(t.total, cur)}${t.balance > 0 && st !== 'Draft' ? `<span class="bal"> · ${money(t.balance, cur)} ${isIncoming(inv) ? 'to pay' : 'due'}</span>` : ''}</span>
+      </span>
+    </button>`;
+  };
+  const chips = [
+    { value: '', label: 'All' }, { value: 'unpaid', label: 'Unpaid' },
+    { value: 'Overdue', label: 'Overdue' }, { value: 'Paid', label: 'Paid' },
+    { value: 'bills', label: 'Bills' },
+  ];
+
   outlet.innerHTML = `
     <div class="page-head">
       <div><h1>Invoices</h1><p class="muted">${money(toCollect, cur)} to collect${toPay ? ` · ${money(toPay, cur)} to pay` : ''}</p></div>
       <button class="btn btn--primary" id="add">+ Invoice</button>
     </div>
-    ${list.length ? `<div class="card-list">${list.map((inv) => {
-      const t = invoiceTotals(inv); const st = displayStatus(inv);
-      return `<button class="item" data-open="${inv.id}">
-        <span class="item__main">
-          <span class="item__title">${escapeHtml(inv.number || 'Invoice')}${isIncoming(inv) ? ' <span class="tag tag--in">bill</span>' : ''}</span>
-          <span class="item__sub">${escapeHtml(recipientName(inv, projects, vendors))} · ${fmtDate(inv.date)}</span>
-        </span>
-        <span class="item__right">${statusChip(st, STATUS_CLASS)}
-          <span class="item__amt">${money(t.total, cur)}${t.balance > 0 && st !== 'Draft' ? `<span class="bal"> · ${money(t.balance, cur)} ${isIncoming(inv) ? 'to pay' : 'due'}</span>` : ''}</span>
-        </span>
-      </button>`;
-    }).join('')}</div>`
+    ${list.length ? `${filterBar({ q: _if.q, placeholder: 'Search number or recipient…', chips, active: _if.status })}
+       <div class="card-list" id="list"></div>`
       : emptyState('📄', 'No invoices yet', 'Raise an invoice for a client, a bill for a vendor, or convert a quote.')}
   `;
   outlet.querySelector('#add').addEventListener('click', () => editInvoice());
-  outlet.querySelectorAll('[data-open]').forEach((el) =>
-    el.addEventListener('click', () => navigate('invoices/' + el.getAttribute('data-open'))));
+  if (!list.length) return;
+
+  const listHost = outlet.querySelector('#list');
+  const paint = () => {
+    const q = _if.q.trim().toLowerCase();
+    const rows = list.filter((inv) => {
+      const st = displayStatus(inv);
+      const okStatus = !_if.status
+        || (_if.status === 'bills' && isIncoming(inv))
+        || (_if.status === 'unpaid' && invoiceTotals(inv).balance > 0 && !['Draft', 'Cancelled'].includes(inv.status))
+        || (_if.status === st);
+      const okSearch = !q || [inv.number, recipientName(inv, projects, vendors)].filter(Boolean).some((s) => s.toLowerCase().includes(q));
+      return okStatus && okSearch;
+    });
+    listHost.innerHTML = rows.length ? rows.map(card).join('') : `<p class="muted small">No invoices match.</p>`;
+    listHost.querySelectorAll('[data-open]').forEach((el) =>
+      el.addEventListener('click', () => navigate('invoices/' + el.getAttribute('data-open'))));
+  };
+  paint();
+  wireFilterBar(outlet, _if, paint);
 }
 
 async function renderDetail(outlet, id) {
