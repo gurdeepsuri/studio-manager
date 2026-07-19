@@ -5,6 +5,7 @@
 import { route, initRouter, start, navigate } from './router.js';
 import { loadSettings, settings } from './state.js';
 import { escapeHtml } from './util.js';
+import { requestPersistent } from './storage.js';
 
 import { render as dashboard } from './views/dashboard.js';
 import { render as clients } from './views/clients.js';
@@ -138,6 +139,9 @@ async function boot() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
+
+  // ask the browser to keep our data durably (not auto-evicted)
+  requestPersistent();
 }
 
 boot();

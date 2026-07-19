@@ -7,7 +7,29 @@ import { toast, confirmDialog, readForm } from '../ui.js';
 import { field, input, textarea, select, row, formActions } from '../form.js';
 import { escapeHtml, isoDate } from '../util.js';
 import { settings, updateSettings, loadSettings } from '../state.js';
+import { storageStatus, requestPersistent, formatBytes } from '../storage.js';
 import { start } from '../router.js';
+
+async function paintStorage(host) {
+  if (!host) return;
+  const s = await storageStatus();
+  const used = s.usage ? ` · using ${formatBytes(s.usage)}` : '';
+  if (!s.supported) {
+    host.innerHTML = `<span class="dot dot--ok"></span> Saved on this device${used}`;
+    return;
+  }
+  if (s.persisted) {
+    host.innerHTML = `<span class="dot dot--ok"></span> Storage is permanent — your data won't be auto-cleared${used}`;
+  } else {
+    host.innerHTML = `<span class="dot dot--warn"></span> Saved on this device${used}
+      <button class="btn btn--soft btn--sm" id="mkPersist" style="margin-left:.5rem">Make permanent</button>`;
+    host.querySelector('#mkPersist').addEventListener('click', async () => {
+      const ok = await requestPersistent();
+      toast(ok ? 'Storage is now permanent' : 'Add the app to your home screen, then try again', ok ? 'ok' : 'warn');
+      paintStorage(host);
+    });
+  }
+}
 
 const CURRENCIES = [
   { value: 'INR', label: '₹ Indian Rupee' },
@@ -60,7 +82,8 @@ export async function render(outlet) {
 
     <h2 class="section-title">Your data</h2>
     <div class="card-form">
-      <p class="muted small">Everything lives on this device. Back up regularly — and to move to a new phone or laptop, export here and import there.</p>
+      <div id="storageStatus" class="storage-status">Checking storage…</div>
+      <p class="muted small">Everything lives on this device and stays after you close the app. Still, back up regularly — and to move to a new phone or laptop, export here and import there.</p>
       <div class="quick-row">
         <button class="btn btn--soft btn--sm" id="export">⬇ Export backup</button>
         <label class="btn btn--soft btn--sm" for="importFile">⬆ Import backup</label>
@@ -72,8 +95,10 @@ export async function render(outlet) {
       </div>
     </div>
 
-    <p class="app-version muted small">Studio Manager · local-first · v2</p>
+    <p class="app-version muted small">Studio Manager · local-first · v1</p>
   `;
+
+  paintStorage(outlet.querySelector('#storageStatus'));
 
   outlet.querySelector('#exportIcs').addEventListener('click', async () => {
     (await import('./appointments.js')).exportAllICS();
