@@ -119,6 +119,7 @@ async function renderDetail(outlet, id) {
       <div class="detail-actions">
         <button class="btn btn--ghost btn--sm" id="share">Share</button>
         <button class="btn btn--ghost btn--sm" id="print">Print / PDF</button>
+        <button class="btn btn--ghost btn--sm" id="dup">Duplicate</button>
         <button class="btn btn--ghost btn--sm" id="edit">Edit</button>
         <button class="btn btn--danger btn--sm" id="del">Delete</button>
       </div>
@@ -169,6 +170,11 @@ async function renderDetail(outlet, id) {
   outlet.querySelector('#edit').addEventListener('click', () => editInvoice(inv));
   outlet.querySelector('#print').addEventListener('click', () => printInvoice(inv, to));
   outlet.querySelector('#share').addEventListener('click', () => shareInvoice(inv, to));
+  outlet.querySelector('#dup').addEventListener('click', () => editInvoice({
+    partyType: inv.partyType, projectId: inv.projectId, vendorId: inv.vendorId, direction: inv.direction,
+    items: (inv.items || []).map((i) => ({ ...i })), discount: inv.discount, taxRate: inv.taxRate,
+    description: inv.description, notes: inv.notes,
+  }));
   outlet.querySelector('#del').addEventListener('click', async () => {
     if (await confirmDialog(`Delete ${inv.number || 'this invoice'}?`)) { await db.remove('invoices', id); toast('Deleted'); navigate('invoices'); }
   });
@@ -199,7 +205,7 @@ function recordPayment(inv) {
         field('Date', input('date', todayISO(), { type: 'date' })),
       )}
       ${row(
-        field('Method', select('method', 'UPI', PAY_METHODS)),
+        field('Method', select('method', settings().lastPayMethod || 'UPI', PAY_METHODS)),
         field('Reference', input('note', '', { placeholder: 'UTR / cheque no.' })),
       )}
       ${formActions('Save payment')}
@@ -212,6 +218,7 @@ function recordPayment(inv) {
     if (!(Number(data.amount) > 0)) { toast('Enter an amount', 'warn'); return; }
     const payments = [...(inv.payments || []), { id: uid(), ...data }];
     await db.save('invoices', { ...inv, payments });
+    if (data.method) updateSettings({ lastPayMethod: data.method });
     closeSheet(); toast('Payment recorded'); start();
   });
 }

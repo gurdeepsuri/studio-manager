@@ -7,6 +7,7 @@ import { loadSettings, settings, updateSettings } from './state.js';
 import { db } from './db.js';
 import { escapeHtml } from './util.js';
 import { requestPersistent } from './storage.js';
+import { applyTheme } from './theme.js';
 
 import { render as dashboard } from './views/dashboard.js';
 import { render as projects } from './views/projects.js';
@@ -47,6 +48,7 @@ function renderShell() {
     <main class="main">
       <div id="view" class="view"></div>
     </main>
+    <button class="fab" id="fab" aria-label="Quick add">+</button>
     <nav class="tabbar">
       ${NAV.map((n) => navLink(n, 'tab')).join('')}
       <button class="tab" id="moreTab" aria-label="More"><span class="tab__icon">⋯</span><span class="tab__label">More</span></button>
@@ -57,6 +59,8 @@ function renderShell() {
     e.preventDefault();
     navigate(a.getAttribute('data-nav'));
   }));
+
+  document.getElementById('fab').addEventListener('click', openQuickAdd);
 
   document.getElementById('moreTab').addEventListener('click', () => {
     import('./ui.js').then(({ openSheet }) => {
@@ -77,6 +81,31 @@ function navLink(n, cls) {
     <span class="tab__icon">${n.icon}</span><span class="tab__label">${n.label}</span>
   </a>`;
 }
+
+// ---- floating quick-add ---------------------------------------------------
+const QUICK_ADD = [
+  { kind: 'project', icon: '📐', label: 'Project', mod: './views/projects.js', fn: 'editProject' },
+  { kind: 'quote', icon: '🧾', label: 'Quote', mod: './views/quotes.js', fn: 'editQuote' },
+  { kind: 'invoice', icon: '📄', label: 'Invoice', mod: './views/invoices.js', fn: 'editInvoice' },
+  { kind: 'appt', icon: '📅', label: 'Meeting', mod: './views/appointments.js', fn: 'editAppt' },
+  { kind: 'expense', icon: '💸', label: 'Expense', mod: './views/expenses.js', fn: 'editExpense' },
+  { kind: 'vendor', icon: '🧰', label: 'Vendor', mod: './views/vendors.js', fn: 'editVendor' },
+];
+async function openQuickAdd() {
+  const { openSheet, closeSheet } = await import('./ui.js');
+  const s = openSheet({
+    title: 'Quick add',
+    body: `<div class="more-grid">${QUICK_ADD.map((q) =>
+      `<button class="more-item" data-q="${q.kind}"><span>${q.icon}</span>${q.label}</button>`).join('')}</div>`,
+  });
+  s.root.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', async () => {
+    const item = QUICK_ADD.find((q) => q.kind === b.getAttribute('data-q'));
+    closeSheet();
+    const mod = await import(item.mod);
+    mod[item.fn]();
+  }));
+}
+
 
 // ---- passcode gate --------------------------------------------------------
 function needsUnlock() {
@@ -121,6 +150,7 @@ async function runMigrations() {
 // ---- boot -----------------------------------------------------------------
 async function boot() {
   await loadSettings();
+  applyTheme(settings().theme);
   await runMigrations();
 
   route('dashboard', dashboard);

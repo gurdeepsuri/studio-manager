@@ -8,6 +8,7 @@ import { field, input, textarea, select, row, formActions } from '../form.js';
 import { escapeHtml, isoDate } from '../util.js';
 import { settings, updateSettings, loadSettings } from '../state.js';
 import { storageStatus, requestPersistent, formatBytes } from '../storage.js';
+import { applyTheme } from '../theme.js';
 import { start } from '../router.js';
 
 async function paintStorage(host) {
@@ -103,6 +104,15 @@ export async function render(outlet) {
       ${formActions('Save defaults')}
     </form>
 
+    <h2 class="section-title">Appearance</h2>
+    <div class="card-form">
+      ${field('Theme', select('theme', st.theme, [
+        { value: 'system', label: 'Match device' },
+        { value: 'light', label: 'Light' },
+        { value: 'dark', label: 'Dark' },
+      ]))}
+    </div>
+
     <h2 class="section-title">Privacy lock</h2>
     <form id="lock" class="form card-form">
       <p class="muted small">Set a 4+ digit passcode to lock the app on this device. Leave blank to turn off. (Convenience lock — not bank-grade security.)</p>
@@ -146,6 +156,12 @@ export async function render(outlet) {
     e.target.value = '';
   });
   logoRemove?.addEventListener('click', () => { logoData = ''; paintLogo(); });
+
+  outlet.querySelector('[name="theme"]').addEventListener('change', async (e) => {
+    applyTheme(e.target.value);
+    await updateSettings({ theme: e.target.value });
+    toast('Appearance updated');
+  });
 
   outlet.querySelector('#exportIcs').addEventListener('click', async () => {
     (await import('./appointments.js')).exportAllICS();

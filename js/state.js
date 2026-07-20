@@ -21,6 +21,9 @@ const DEFAULT_SETTINGS = {
   defaultReminder: 60, // default meeting reminder, minutes before
   passcode: '',        // optional privacy lock (not security-grade)
   migratedV3: false,   // one-time clients→projects migration flag
+  theme: 'system',     // 'system' | 'light' | 'dark'
+  lastExpenseCategory: 'Materials', // smart default for the next expense
+  lastPayMethod: 'UPI',             // smart default for the next payment
 };
 
 let _settings = null;

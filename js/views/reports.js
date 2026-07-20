@@ -13,21 +13,25 @@ import { navigate } from '../router.js';
 const C_REV = '#2a78d6';  // revenue / received  (validated categorical slot 1)
 const C_EXP = '#eb6834';  // expenses            (validated categorical slot 6)
 
+let _period = 'all'; // 'all' | 'fy'
+
+// Indian financial year (Apr 1 – Mar 31)
+function fyRange(now = new Date()) {
+  const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return { start: new Date(y, 3, 1), end: new Date(y + 1, 3, 1), label: `FY ${y}–${String((y + 1) % 100).padStart(2, '0')}` };
+}
+
 export async function render(outlet) {
   const [invoices, expenses, projects] = await Promise.all([
     db.list('invoices'), db.list('expenses'), db.list('projects'),
   ]);
   const cur = currency();
-
-  const live = invoices.filter((i) => i.status !== 'Cancelled');
-  const outgoing = live.filter((i) => (i.direction || 'out') === 'out');
-  const incoming = live.filter((i) => (i.direction || 'out') === 'in');
-  const invoiced = sum(outgoing, (i) => invoiceTotals(i).total);
-  const received = sum(outgoing, (i) => invoiceTotals(i).paid);
-  const outstanding = sum(outgoing, (i) => invoiceTotals(i).balance);
-  const payables = sum(incoming, (i) => invoiceTotals(i).balance);
-  const spent = sum(expenses, (e) => e.amount);
-  const net = received - spent;
+  const fy = fyRange();
+  const inPeriod = (dateStr) => {
+    if (_period === 'all') return true;
+    const d = new Date(dateStr);
+    return d >= fy.start && d < fy.end;
+  };
 
   if (!invoices.length && !expenses.length) {
     outlet.innerHTML = `<div class="page-head"><div><h1>Reports</h1></div></div>${
@@ -35,8 +39,25 @@ export async function render(outlet) {
     return;
   }
 
+  const live = invoices.filter((i) => i.status !== 'Cancelled');
+  const outgoing = live.filter((i) => (i.direction || 'out') === 'out');
+  const incoming = live.filter((i) => (i.direction || 'out') === 'in');
+  // invoiced/outstanding by invoice date; received by payment date; expenses by date
+  const outInP = outgoing.filter((i) => inPeriod(i.date));
+  const invoiced = sum(outInP, (i) => invoiceTotals(i).total);
+  const outstanding = sum(outInP, (i) => invoiceTotals(i).balance);
+  const received = sum(outgoing.flatMap((i) => i.payments || []).filter((p) => inPeriod(p.date)), (p) => p.amount);
+  const spent = sum(expenses.filter((e) => inPeriod(e.date)), (e) => e.amount);
+  const payables = sum(incoming, (i) => invoiceTotals(i).balance);
+  const net = received - spent;
+
   outlet.innerHTML = `
-    <div class="page-head"><div><h1>Reports</h1><p class="muted">All-time overview</p></div></div>
+    <div class="page-head"><div><h1>Reports</h1><p class="muted">${_period === 'all' ? 'All-time overview' : fy.label}</p></div></div>
+
+    <div class="seg" id="periodSeg">
+      <button class="seg__btn ${_period === 'all' ? 'seg__btn--on' : ''}" data-period="all">All-time</button>
+      <button class="seg__btn ${_period === 'fy' ? 'seg__btn--on' : ''}" data-period="fy">This financial year</button>
+    </div>
 
     <div class="stat-grid stat-grid--4">
       <div class="stat"><span class="stat__label">Invoiced</span><span class="stat__val">${moneyShort(invoiced, cur)}</span></div>
@@ -61,7 +82,11 @@ export async function render(outlet) {
     <div id="projRows"></div>
   `;
 
-  renderProjectRows(outlet.querySelector('#projRows'), projects, outgoing, expenses, cur);
+  outlet.querySelectorAll('#periodSeg [data-period]').forEach((b) => b.addEventListener('click', () => {
+    _period = b.getAttribute('data-period'); render(outlet);
+  }));
+
+  renderProjectRows(outlet.querySelector('#projRows'), projects, outgoing, expenses, cur, inPeriod);
 }
 
 // ---- 6-month grouped bars (received vs expenses), shared y-scale ----------
@@ -102,11 +127,11 @@ function monthlyChart(invoices, expenses, cur) {
 }
 
 // ---- per-project profit rows with comparable bars ------------------------
-function renderProjectRows(host, projects, invoices, expenses, cur) {
+function renderProjectRows(host, projects, invoices, expenses, cur, inPeriod = () => true) {
   const rows = projects.map((p) => {
     const pInv = invoices.filter((i) => i.projectId === p.id);
-    const revenue = sum(pInv, (i) => invoiceTotals(i).paid);
-    const cost = sum(expenses.filter((e) => e.projectId === p.id), (e) => e.amount);
+    const revenue = sum(pInv.flatMap((i) => i.payments || []).filter((pm) => inPeriod(pm.date)), (pm) => pm.amount);
+    const cost = sum(expenses.filter((e) => e.projectId === p.id && inPeriod(e.date)), (e) => e.amount);
     return { p, revenue, cost, profit: revenue - cost };
   }).filter((r) => r.revenue || r.cost)
     .sort((a, b) => b.profit - a.profit);

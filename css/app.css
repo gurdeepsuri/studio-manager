@@ -30,6 +30,34 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
 }
 
+/* ---- dark theme (explicit toggle wins; otherwise follow the device) ---- */
+:root { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --cream: #2b2620; --cream-deep: #362f26; --paper: #1a1712;
+  --blue: #7f9da0; --blue-deep: #9ab6b8;
+  --yellow: #f3a72f; --yellow-soft: #f6bd63;
+  --maroon: #e08b7f; --maroon-soft: #e79a8f;
+  --ink: #efe7d8; --ink-soft: #b0a693; --line: #3a332a;
+  --white: #24201a;
+  --ok: #5bbd84; --warn: #e0a34e; --danger: #e5766b; --info: #86b6b9;
+  --shadow: 0 18px 40px -20px rgba(0,0,0,.6);
+  --shadow-sm: 0 6px 16px -10px rgba(0,0,0,.7);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --cream: #2b2620; --cream-deep: #362f26; --paper: #1a1712;
+    --blue: #7f9da0; --blue-deep: #9ab6b8;
+    --maroon: #e08b7f; --maroon-soft: #e79a8f;
+    --ink: #efe7d8; --ink-soft: #b0a693; --line: #3a332a;
+    --white: #24201a;
+    --ok: #5bbd84; --warn: #e0a34e; --danger: #e5766b; --info: #86b6b9;
+    --shadow: 0 18px 40px -20px rgba(0,0,0,.6);
+    --shadow-sm: 0 6px 16px -10px rgba(0,0,0,.7);
+  }
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -138,10 +166,10 @@ a { color: inherit; text-decoration: none; }
 /* ============================ Chips / pills ============================ */
 .chip { display: inline-block; font-size: .72rem; letter-spacing: .04em; padding: .18rem .55rem;
   border-radius: 999px; background: var(--cream); color: var(--ink-soft); white-space: nowrap; }
-.chip--go { background: #e3f0e8; color: var(--ok); }
-.chip--done { background: #e6efe9; color: #2b6b46; }
-.chip--info { background: #e3edee; color: var(--info); }
-.chip--warn { background: #f6ecdc; color: var(--warn); }
+.chip--go { background: color-mix(in srgb, var(--ok) 16%, var(--white)); color: var(--ok); }
+.chip--done { background: color-mix(in srgb, var(--ok) 16%, var(--white)); color: var(--ok); }
+.chip--info { background: color-mix(in srgb, var(--info) 16%, var(--white)); color: var(--info); }
+.chip--warn { background: color-mix(in srgb, var(--warn) 18%, var(--white)); color: var(--warn); }
 .chip--neutral { background: var(--cream); color: var(--ink-soft); }
 .chip--link { background: var(--cream); color: var(--maroon); }
 .chip--link:hover { background: var(--cream-deep); }
@@ -350,13 +378,14 @@ select.control { appearance: none; background-image: url("data:image/svg+xml,%3C
 
 /* banners */
 .alert-banner { display: flex; align-items: center; justify-content: space-between; gap: .6rem; width: 100%;
-  background: #f7ece0; border: 1px solid #e7c9a3; color: #8a5a1a; border-radius: var(--radius);
-  padding: .8rem 1rem; margin: .4rem 0 1rem; font-size: .92rem; cursor: pointer; }
+  background: color-mix(in srgb, var(--warn) 16%, var(--white)); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--white)); color: var(--warn); border-radius: var(--radius);
+  padding: .8rem 1rem; margin: .4rem 0 1rem; font-size: .92rem; cursor: pointer; text-align: left; }
+.alert-banner--info { background: color-mix(in srgb, var(--info) 16%, var(--white)); border-color: color-mix(in srgb, var(--info) 35%, var(--white)); color: var(--info); }
 .net-banner { display: flex; align-items: center; justify-content: space-between; gap: .6rem;
   border-radius: var(--radius); padding: .8rem 1rem; margin: .2rem 0 .5rem; }
 .net-banner strong { font-family: var(--font-display); font-size: 1.3rem; }
-.net-banner--pos { background: #e6efe9; color: #2b6b46; }
-.net-banner--neg { background: #f6e4e2; color: var(--danger); }
+.net-banner--pos { background: color-mix(in srgb, var(--ok) 16%, var(--white)); color: var(--ok); }
+.net-banner--neg { background: color-mix(in srgb, var(--danger) 16%, var(--white)); color: var(--danger); }
 
 /* reports chart */
 .chart-legend { display: flex; gap: 1rem; margin-bottom: .4rem; }
@@ -428,3 +457,30 @@ select.control { appearance: none; background-image: url("data:image/svg+xml,%3C
 .pq__brandwrap { display: flex; align-items: flex-start; gap: .8rem; }
 .pq__logo { max-height: 64px; max-width: 160px; object-fit: contain; }
 .pq__desc { margin: .6rem 0 0; font-size: .92rem; }
+
+/* ============================ v3 finish ============================ */
+/* floating quick-add */
+.fab {
+  position: fixed; right: 18px; bottom: calc(84px + var(--safe-b)); z-index: 45;
+  width: 56px; height: 56px; border-radius: 50%; background: var(--maroon); color: var(--paper);
+  font-size: 2rem; font-weight: 300; line-height: 1; display: grid; place-content: center;
+  box-shadow: var(--shadow); transition: transform .12s ease, background .2s;
+}
+.fab:hover { background: var(--maroon-soft); }
+.fab:active { transform: scale(.9); }
+@media (min-width: 820px) { .fab { right: 26px; bottom: 26px; } }
+
+/* larger, comfier tap targets */
+.btn { min-height: 40px; }
+.btn--sm { min-height: 34px; }
+.icon-btn { width: 38px; height: 38px; }
+.tab { min-height: 52px; }
+
+/* keep printed documents in brand colours regardless of app theme */
+@media print {
+  #print-area { color-scheme: light; }
+  .pq, .pq__muted, .pq__table td, .pq__table th { color: #1e1a16 !important; }
+  .pq__brand, .pq__grand, .pq__title { color: #7c1f17 !important; }
+  .pq__head { border-bottom-color: #7c1f17 !important; }
+  .pq__grand { border-top-color: #7c1f17 !important; }
+}

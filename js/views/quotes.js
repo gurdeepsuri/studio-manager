@@ -85,6 +85,7 @@ async function renderDetail(outlet, id) {
       <div class="detail-actions">
         <button class="btn btn--ghost btn--sm" id="share">Share</button>
         <button class="btn btn--ghost btn--sm" id="print">Print / PDF</button>
+        <button class="btn btn--ghost btn--sm" id="dup">Duplicate</button>
         <button class="btn btn--ghost btn--sm" id="edit">Edit</button>
         <button class="btn btn--danger btn--sm" id="del">Delete</button>
       </div>
@@ -132,6 +133,11 @@ async function renderDetail(outlet, id) {
   outlet.querySelector('#edit').addEventListener('click', () => editQuote(q));
   outlet.querySelector('#print').addEventListener('click', () => printQuote(q, to));
   outlet.querySelector('#share').addEventListener('click', () => shareQuote(q, to));
+  outlet.querySelector('#dup').addEventListener('click', () => editQuote({
+    partyType: q.partyType, projectId: q.projectId, vendorId: q.vendorId,
+    items: (q.items || []).map((i) => ({ ...i })), discount: q.discount, taxRate: q.taxRate,
+    description: q.description, notes: q.notes,
+  }));
   outlet.querySelector('#toInvoice').addEventListener('click', async () => {
     if (await confirmDialog('Create an invoice from this quote? You can edit it afterwards.', { danger: false, okLabel: 'Create invoice' })) {
       (await import('./invoices.js')).invoiceFromQuote(q);

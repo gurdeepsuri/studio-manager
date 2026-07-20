@@ -38,7 +38,13 @@ import here.
 - **Reports** — money in vs out, net profit, unpaid vendor bills (payables),
   a 6-month trend, and profit by project.
 - **Settings** — business profile + **company logo**, currency/GST defaults,
-  default notes/terms, quote & invoice numbering, backup/restore, passcode lock.
+  default notes/terms, quote & invoice numbering, **light/dark/system theme**,
+  backup/restore, passcode lock.
+
+Throughout: a **floating quick-add** button on every screen, **search + status
+filters** on the Projects/Invoices/Quotes lists, **duplicate** for invoices &
+quotes, smart defaults (last expense category / payment method), and a
+**"this financial year"** view in Reports.
 
 ## Run locally
 

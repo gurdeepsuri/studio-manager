@@ -31,6 +31,7 @@ export async function render(outlet) {
     (p) => p.amount,
   );
   const monthExp = sum(expenses.filter((e) => new Date(e.date) >= monthStart), (e) => e.amount);
+  const awaitingQuotes = quotes.filter((q) => q.status === 'Sent');
 
   const upcoming = appts
     .map((a) => ({ ...a, ts: new Date(a.datetime).getTime() }))
@@ -60,6 +61,11 @@ export async function render(outlet) {
 
     ${overdue.length ? `<div class="alert-banner" data-go="invoices">
       <span>⚠️ ${overdue.length} overdue invoice${overdue.length > 1 ? 's' : ''} · ${money(sum(overdue, (i) => invoiceTotals(i).balance), cur)} due</span>
+      <span class="item__chev">›</span>
+    </div>` : ''}
+
+    ${awaitingQuotes.length ? `<div class="alert-banner alert-banner--info" data-go="quotes">
+      <span>📩 ${awaitingQuotes.length} quote${awaitingQuotes.length > 1 ? 's' : ''} awaiting a reply — time to follow up?</span>
       <span class="item__chev">›</span>
     </div>` : ''}
 

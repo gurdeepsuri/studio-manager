@@ -6,7 +6,7 @@ import { db } from '../db.js';
 import { openSheet, closeSheet, toast, confirmDialog, emptyState, readForm } from '../ui.js';
 import { field, input, textarea, select, row, checkbox, formActions } from '../form.js';
 import { escapeHtml, money, fmtDate, todayISO, sum, indexById, startOfMonth } from '../util.js';
-import { currency } from '../state.js';
+import { currency, settings, updateSettings } from '../state.js';
 import { navigate, start } from '../router.js';
 
 export const CATEGORIES = ['Materials', 'Furniture', 'Labour', 'Travel', 'Software', 'Marketing', 'Office', 'Fees', 'Misc'];
@@ -87,7 +87,7 @@ async function renderDetail(outlet, id) {
 }
 
 export async function editExpense(preset = {}) {
-  const e = preset.id ? preset : { date: todayISO(), category: 'Materials', ...preset };
+  const e = preset.id ? preset : { date: todayISO(), category: settings().lastExpenseCategory || 'Materials', ...preset };
   const isNew = !e.id;
   const projects = await db.list('projects');
   const s = openSheet({
@@ -113,6 +113,7 @@ export async function editExpense(preset = {}) {
     const data = readForm(form);
     if (!(Number(data.amount) > 0)) { toast('Enter an amount', 'warn'); return; }
     await db.save('expenses', { ...e, ...data });
+    if (data.category) updateSettings({ lastExpenseCategory: data.category });
     closeSheet();
     toast(isNew ? 'Expense added' : 'Saved');
     start();
